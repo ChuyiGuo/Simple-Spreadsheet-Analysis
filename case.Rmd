@@ -1,0 +1,123 @@
+---
+title: "HireArt Case Study"
+author: "Chuyi Guo"
+date: "3/14/2019"
+output: pdf_document
+---
+
+Data Pre-processing.
+
+```{r, message=FALSE, warning=FALSE}
+# read in the data into system.
+library(readxl)
+library(dplyr)
+library(ggplot2)
+data = read_excel('/Users/ChuyiGuo/Desktop/HireArt/HireArt - Data Analyst Exercise 10.12.17.xlsx')
+data = as.data.frame(data)
+# extract month, season, year for each line of data
+data$month = as.numeric(format(as.Date(data$'Date of Contact'), "%m"))
+data$year = as.numeric(format(as.Date(data$'Date of Contact'), "%Y"))
+
+# define function for getting season
+# for every 3 monthes, group they as 1 season.
+# i.e. month 1,2,3 is in seasion 1
+get_season = function(x) {
+  if (x %in% c(1,2,3)) {
+  data$season = 1
+} else if (x %in% c(4,5,6)) {
+  data$season = 2
+} else if (x %in% c(7,8, 9)) {
+  data$season = 3
+} else {
+  data$season = 4
+}
+}
+
+data$season = sapply(data$month, get_season)
+# extract some of the columns  
+data = data[,c(colnames(data) %in% c('Client Name', "month", "year", "season"))]
+```
+
+According to the spreadsheet, a client may be contacted multiply times within one month. For this situation, the client should be counted as one, based on a monthly basis. Those duplicated records need to be taken care.
+
+```{r}
+data2 = data[!duplicated(data),]
+```
+
+
+The numbers of clients for each month of each year are calculated (named n). I.e. the team contacted 9 clients in January 2014. 
+
+The numbers of clients for each season of each year are calculated (named season_per_year). I.e. the team contacted 31 clients in the first season (January, February, March) of 2014. 
+
+Also, the numbers of clients for each year are calculated (named year_total). I.e. the team contacted 186 clients in the first season (January, February, March) of 2014. 
+
+Seasonal and yearly proportions are calculated, named season_prop and year_prop, respectively. Seasonal/yearly proportion is the number of clients for a month divided by the total number of clients for the corresponding season/year. I.e.  for January 2014, the Seasonal proportion is 9/31 = 0.29 and its yearly proportion is 9/184 = 0.05. It gives a comparative relation to a whole, other than absolute values. 
+
+```{r}
+total = as.data.frame(
+  data2 %>%
+    group_by(month, season, year) %>%
+    summarise(n = n()) %>%
+    group_by (season, year) %>%
+    mutate(season_per_year = sum(n)) %>%
+    group_by(year) %>%
+    mutate(year_total = sum(n)) %>% 
+    mutate(season_prop = n/season_per_year) %>%
+    mutate(year_prop = n/year_total)
+)
+total
+```
+
+Plot out the number of clients per month to get a intuitive overviews for this data set.
+
+```{r, fig.height=4, fig.width=8}
+ggplot(total,aes(x = month, y = n )) +
+  geom_point(aes(color = factor(year))) +
+  geom_line(aes(color = factor(year))) +
+  labs(y="Number of Clients") +
+  scale_x_continuous(breaks = seq(1,12,1)) +
+  scale_color_brewer(palette = "Set1")
+```
+
+Below shows the sum of clients for each month during the four-year period. October has the highest value, which indicates the team is likely to contact the most clients during October. 
+
+```{r}
+month_total = as.data.frame(
+  total %>%
+    group_by(month) %>%
+    summarise(month_total = sum(n)) 
+)
+month_total
+month.abb[which.max(month_total$month_total)]
+```
+
+In order to avoid the result being affected by extreme values, the averaged seasonal proportions are calculated here. That is, for each season, take the average of its proportions during the 4-year period. Higher proportion means relatively more clients are contacted within a 3-month period. 
+
+Again, after comparing seasonal proportion, October has the highest value. It supports previous conclusion. 
+
+```{r}
+season_avg = as.data.frame(
+  total %>%
+  group_by(month) %>%
+  summarise(avg_prop = mean(season_prop)) 
+)
+
+season_avg
+
+month.abb[which.max(season_avg$avg_prop)]
+```
+
+Also, the average yearly proportions are calculated here and gives the same conclusion.
+
+```{r}
+year_avg = as.data.frame(
+  total %>%
+    group_by(month) %>%
+    summarise(avg_prop = mean(year_prop)) 
+)
+
+month.abb[which.max(year_avg$year_prop)]
+```
+
+Therefore, it can be concluded that October is the month that the team is likely to contact the most clients.
+
