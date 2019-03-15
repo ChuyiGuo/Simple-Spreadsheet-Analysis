@@ -14,28 +14,11 @@ library(dplyr)
 library(ggplot2)
 data = read_excel('/Users/ChuyiGuo/Desktop/HireArt/HireArt - Data Analyst Exercise 10.12.17.xlsx')
 data = as.data.frame(data)
-# extract month, season, year for each line of data
+# extract month, year for each line of data
 data$month = as.numeric(format(as.Date(data$'Date of Contact'), "%m"))
 data$year = as.numeric(format(as.Date(data$'Date of Contact'), "%Y"))
-
-# define function for getting season
-# for every 3 monthes, group they as 1 season.
-# i.e. month 1,2,3 is in seasion 1
-get_season = function(x) {
-  if (x %in% c(1,2,3)) {
-  data$season = 1
-} else if (x %in% c(4,5,6)) {
-  data$season = 2
-} else if (x %in% c(7,8, 9)) {
-  data$season = 3
-} else {
-  data$season = 4
-}
-}
-
-data$season = sapply(data$month, get_season)
 # extract some of the columns  
-data = data[,c(colnames(data) %in% c('Client Name', "month", "year", "season"))]
+data = data[,c(colnames(data) %in% c('Client Name', "month", "year"))]
 ```
 
 According to the spreadsheet, a client may be contacted multiply times within one month. For this situation, the client should be counted as one, based on a monthly basis. Those duplicated records need to be taken care.
@@ -44,31 +27,34 @@ According to the spreadsheet, a client may be contacted multiply times within on
 data2 = data[!duplicated(data),]
 ```
 
+Get a client list for the team. That is the clients that had been contacted within those 4 years. Below shows some of the clients' name.
+
+```{r}
+client_list = unique(data2$`Client Name`)
+head(client_list)
+```
+
+There are totally 'r length(client_list)' clients for this team.
+
+```{r}
+length(client_list)
+```
 
 The numbers of clients for each month of each year are calculated (named n). I.e. the team contacted 9 clients in January 2014. 
 
-The numbers of clients for each season of each year are calculated (named season_per_year). I.e. the team contacted 31 clients in the first season (January, February, March) of 2014. 
-
-Also, the numbers of clients for each year are calculated (named year_total). I.e. the team contacted 186 clients in the first season (January, February, March) of 2014. 
-
-Seasonal and yearly proportions are calculated, named season_prop and year_prop, respectively. Seasonal/yearly proportion is the number of clients for a month divided by the total number of clients for the corresponding season/year. I.e.  for January 2014, the Seasonal proportion is 9/31 = 0.29 and its yearly proportion is 9/184 = 0.05. It gives a comparative relation to a whole, other than absolute values. 
+Also, the percentage of its clients for that month (named prop) are calculated. I.e. the team contacted 25% of its clients in January 2014. 
 
 ```{r}
 total = as.data.frame(
   data2 %>%
-    group_by(month, season, year) %>%
+    group_by(month, year) %>%
     summarise(n = n()) %>%
-    group_by (season, year) %>%
-    mutate(season_per_year = sum(n)) %>%
-    group_by(year) %>%
-    mutate(year_total = sum(n)) %>% 
-    mutate(season_prop = n/season_per_year) %>%
-    mutate(year_prop = n/year_total)
+    mutate(prop = n/length(client_list))
 )
 total
 ```
 
-Plot out the number of clients per month to get a intuitive overviews for this data set.
+Plot out the number of clients per month to get a intuitive overviews for this data set. It shows most of the clients are contacted in October.
 
 ```{r, fig.height=4, fig.width=8}
 ggplot(total,aes(x = month, y = n )) +
@@ -79,45 +65,28 @@ ggplot(total,aes(x = month, y = n )) +
   scale_color_brewer(palette = "Set1")
 ```
 
-Below shows the sum of clients for each month during the four-year period. October has the highest value, which indicates the team is likely to contact the most clients during October. 
+Below shows the average number of clients and its percentage for each month during the four-year period. October has the highest value, which indicates on average, 80% of its clients had been contacted in October.
 
 ```{r}
-month_total = as.data.frame(
+month_avg = as.data.frame(
   total %>%
     group_by(month) %>%
-    summarise(month_total = sum(n)) 
-)
-month_total
-month.abb[which.max(month_total$month_total)]
-```
-
-In order to avoid the result being affected by extreme values, the averaged seasonal proportions are calculated here. That is, for each season, take the average of its proportions during the 4-year period. Higher proportion means relatively more clients are contacted within a 3-month period. 
-
-Again, after comparing seasonal proportion, October has the highest value. It supports previous conclusion. 
-
-```{r}
-season_avg = as.data.frame(
-  total %>%
-  group_by(month) %>%
-  summarise(avg_prop = mean(season_prop)) 
+    summarise(month_avg = mean(n), month_prop_avg = mean(prop)) 
 )
 
-season_avg
-
-month.abb[which.max(season_avg$avg_prop)]
+ggplot(month_avg, aes(x = month, y = month_avg)) +
+  geom_bar(stat="identity", position=position_dodge(),fill='skyblue') +
+  geom_text(aes(label=month_avg), vjust=1.6, 
+            color="black",position = position_dodge(0.9), size=3.5) +
+  scale_y_continuous(sec.axis = sec_axis(~./30, name="Percentage")) +
+  geom_line(aes(x = month, y = month_prop_avg*30, group=1),col='red') +
+  geom_point(aes(x = month, y = month_prop_avg*30, group=1),col='red') +
+  geom_text(aes(x=month, y=month_prop_avg*30,
+                label=paste(round(month_prop_avg*100,digits=2),"%",sep="")),
+            vjust=1.6, size=3,col='red') +
+  scale_colour_brewer(palette="Set1") 
 ```
 
-Also, the average yearly proportions are calculated here and gives the same conclusion.
-
-```{r}
-year_avg = as.data.frame(
-  total %>%
-    group_by(month) %>%
-    summarise(avg_prop = mean(year_prop)) 
-)
-
-month.abb[which.max(year_avg$year_prop)]
-```
 
 Therefore, it can be concluded that October is the month that the team is likely to contact the most clients.
 
